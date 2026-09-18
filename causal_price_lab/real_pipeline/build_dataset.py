@@ -66,13 +66,12 @@ def _load_category(category: str, max_products: int | None):
         repo_type="dataset"
     )
 
-    # Load metadata JSONL (streaming to avoid loading entire 2GB+ file)
-    print(f"    Loading metadata (up to {max_products} products)...", flush=True)
+    # Load metadata JSONL. Read entire file for random sampling after filtering;
+    # file is large (2GB) but streaming is still reasonable vs. seeking.
+    print(f"    Loading all metadata...", flush=True)
     meta_rows = []
     with open(meta_file, 'r') as f:
         for i, line in enumerate(f):
-            if max_products is not None and len(meta_rows) >= max_products:
-                break
             record = json.loads(line)
             meta_rows.append(record)
             if (i + 1) % 10000 == 0:
