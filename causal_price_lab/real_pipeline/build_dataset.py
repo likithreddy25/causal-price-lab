@@ -241,8 +241,12 @@ def build(categories: list[str], max_products_per_category: int, embed_dim_batch
                 embeddings.append(embedder.embed_images(images))
         if embeddings:
             embeddings = np.concatenate(embeddings, axis=0)
+            # Filter merged to only products with successful embeddings
+            valid_asins = merged.iloc[:len(embeddings)]["parent_asin"].values
+            merged = merged[merged["parent_asin"].isin(valid_asins)]
         else:
-            embeddings = np.zeros((len(merged), embedder.dim))
+            embeddings = np.zeros((0, embedder.dim))
+            merged = merged.iloc[0:0]  # Empty dataframe
 
         out = pd.DataFrame(
             {
