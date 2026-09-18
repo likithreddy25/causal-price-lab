@@ -1,0 +1,27 @@
+{
+  "true_effect": 4.0,
+  "n_products": 1600,
+  "n_treated": 800,
+  "n_matched_pairs": 328,
+  "match_rate": 0.41,
+  "caliper_logit_units": 0.5358058829547233,
+  "naive_ate": 7.854388141905909,
+  "naive_ate_error_vs_true": 3.8543881419059094,
+  "matched_ate": 4.416304013004739,
+  "matched_ate_ci95": [
+    4.041508808236297,
+    4.793507227949794
+  ],
+  "matched_ate_error_vs_true": 0.41630401300473885,
+  "bias_reduction_pct": 89.19921923589965,
+  "max_abs_smd_before_matching": 1.6866103203398608,
+  "max_abs_smd_after_matching": 0.211014304967816,
+  "placebo_naive_ate": 3.8710810084919656,
+  "placebo_matched_ate": 0.5160814416416664,
+  "placebo_matched_ci95": [
+    0.13296063309266518,
+    0.8933838005766153
+  ],
+  "placebo_ci_contains_zero": false,
+  "placebo_bias_reduction_pct": 86.6682861838969
+}

@@ -1,0 +1,8 @@
+[project]
+name = "causal-price-lab"
+version = "0.1.0"
+description = "Does price tier causally affect a product's review growth? Propensity score matching with real product-image embeddings as a visual confound control."
+requires-python = ">=3.10"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

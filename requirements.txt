@@ -1,0 +1,16 @@
+# Core (needed for everything, including synthetic validation)
+pandas>=2.2
+numpy>=1.26
+scikit-learn>=1.5
+scipy>=1.13
+statsmodels>=0.14
+matplotlib>=3.9
+pyarrow>=16
+
+# Real-data pipeline only (causal_price_lab/real_pipeline/) -- not needed
+# to run the synthetic validation suite.
+datasets>=2.20
+torch>=2.3
+transformers>=4.40
+pillow>=10.3
+requests>=2.32
