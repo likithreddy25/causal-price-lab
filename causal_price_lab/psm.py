@@ -33,6 +33,7 @@ class MatchResult:
     n_treated: int
     n_matched: int
     caliper: float
+    propensity_covariates: list[str]  # actual covariates used for propensity model (post-PCA-reduction)
 
 
 def _reduce_embeddings(df: pd.DataFrame, embed_cols: list[str], n_components: int = 8) -> tuple[pd.DataFrame, list[str]]:
@@ -82,11 +83,15 @@ def match(
     """
     df = df.reset_index(drop=True).copy()
 
-    # Separate embeddings from other covariates and apply PCA
+    # Separate embeddings from other covariates and apply PCA (if not already reduced)
     embed_cols = [c for c in covariate_cols if c.startswith(schema.IMAGE_EMBED_PREFIX)]
     non_embed_cols = [c for c in covariate_cols if not c.startswith(schema.IMAGE_EMBED_PREFIX)]
+    pca_cols = [c for c in covariate_cols if c.startswith("_pca_embed_")]
 
-    if embed_cols:
+    # If PCA columns already exist in data, use them directly; otherwise reduce raw embeddings
+    if pca_cols:
+        propensity_covariates = non_embed_cols + pca_cols
+    elif embed_cols:
         df, reduced_embed_cols = _reduce_embeddings(df, embed_cols, n_components=8)
         propensity_covariates = non_embed_cols + reduced_embed_cols
     else:
@@ -146,6 +151,7 @@ def match(
         n_treated=n_treated,
         n_matched=len(matched_pairs),
         caliper=caliper,
+        propensity_covariates=propensity_covariates,
     )
 
 

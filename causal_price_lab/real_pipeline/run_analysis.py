@@ -21,10 +21,17 @@ def run(df: pd.DataFrame) -> dict:
     embed_dim = sum(1 for c in df.columns if c.startswith(schema.IMAGE_EMBED_PREFIX))
     covariates = [schema.BASELINE_RATING, schema.BASELINE_REVIEW_COUNT] + schema.image_embed_columns(embed_dim)
 
+    # Pre-compute PCA reduction on embeddings so both match() and balance_table()
+    # work with the same df that has PCA columns. This ensures balance metrics are
+    # computed on the actual covariates used for propensity fitting, not raw embeddings.
+    embed_cols = [c for c in covariates if c.startswith(schema.IMAGE_EMBED_PREFIX)]
+    if embed_cols:
+        df, _ = psm._reduce_embeddings(df, embed_cols, n_components=8)
+
     naive = psm.naive_ate(df, schema.OUTCOME_REVIEW_GROWTH)
     match_result = psm.match(df, covariate_cols=covariates)
     matched = psm.estimate_ate(df, match_result, schema.OUTCOME_REVIEW_GROWTH)
-    balance = diagnostics.balance_table(df, match_result, covariates, schema.TREATMENT)
+    balance = diagnostics.balance_table(df, match_result, match_result.propensity_covariates, schema.TREATMENT)
     placebo = diagnostics.placebo_test(df, match_result, schema.PLACEBO_OUTCOME, schema.TREATMENT)
 
     return {
