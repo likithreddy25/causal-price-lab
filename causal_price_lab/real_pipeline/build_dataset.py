@@ -66,18 +66,48 @@ def _load_category(category: str, max_products: int | None):
         repo_type="dataset"
     )
 
-    # Load metadata JSONL. Read entire file for random sampling after filtering;
-    # file is large (2GB) but streaming is still reasonable vs. seeking.
-    print(f"    Loading all metadata...", flush=True)
+    # Load metadata JSONL with inline filtering to avoid holding all rows in memory.
+    # Check price-numeric and has_large_image on each record as parsed; only keep
+    # those that pass both checks. This reduces memory footprint dramatically for
+    # large categories (e.g., Home_and_Kitchen: 3.7M rows → ~150K eligible).
+    print(f"    Loading and filtering metadata...", flush=True)
+
+    def has_large_image(images):
+        if not isinstance(images, list) or len(images) == 0:
+            return False
+        return any(isinstance(img, dict) and "large" in img and img["large"] for img in images)
+
     meta_rows = []
+    rows_scanned = 0
     with open(meta_file, 'r') as f:
-        for i, line in enumerate(f):
+        for line in f:
+            rows_scanned += 1
             record = json.loads(line)
+
+            # Check price validity
+            price = record.get("price")
+            if price is None:
+                continue
+            try:
+                if isinstance(price, str):
+                    price_float = float(price)
+                else:
+                    price_float = float(price)
+            except (ValueError, TypeError):
+                continue
+
+            # Check has_large_image
+            if not has_large_image(record.get("images", [])):
+                continue
+
+            # Both checks passed; keep this record
             meta_rows.append(record)
-            if (i + 1) % 10000 == 0:
-                print(f"      {i + 1} products loaded...", flush=True)
+
+            if rows_scanned % 10000 == 0:
+                print(f"      {rows_scanned} scanned, {len(meta_rows)} eligible...", flush=True)
+
     meta_df = pd.DataFrame(meta_rows)
-    print(f"    Loaded {len(meta_df)} metadata rows", flush=True)
+    print(f"    Loaded {len(meta_df)} eligible metadata rows (from {rows_scanned} total)", flush=True)
 
     # Load reviews JSONL (streaming, filtered to products in meta_df)
     print(f"    Loading reviews (filtered to {len(meta_df)} products)...", flush=True)
@@ -93,25 +123,10 @@ def _load_category(category: str, max_products: int | None):
     reviews_df = pd.DataFrame(reviews_rows)
     print(f"    Loaded {len(reviews_df)} review rows", flush=True)
 
-    # Keep only products with a real numeric price and at least one image.
-    # Price is already float in the JSONL format, but handle both cases
-    if meta_df["price"].dtype == 'object':
-        meta_df["price_numeric"] = pd.to_numeric(meta_df["price"], errors="coerce")
-    else:
-        meta_df["price_numeric"] = meta_df["price"]
-    meta_df = meta_df.dropna(subset=["price_numeric"])
-
-    # Filter to products with at least one image with a "large" URL
-    def has_large_image(images):
-        if not isinstance(images, list) or len(images) == 0:
-            return False
-        return any(isinstance(img, dict) and "large" in img and img["large"] for img in images)
-    meta_df = meta_df[meta_df["images"].apply(has_large_image)]
-
     if max_products is not None:
         meta_df = meta_df.sample(n=min(max_products, len(meta_df)), random_state=0)
 
-    print(f"    Meta products before final filter: {len(meta_df)}", flush=True)
+    print(f"    Sampled to {len(meta_df)} meta products", flush=True)
 
     # Filter reviews to only products in metadata
     reviews_df = reviews_df[reviews_df["parent_asin"].isin(meta_df["parent_asin"])]
