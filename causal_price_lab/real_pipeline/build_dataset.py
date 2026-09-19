@@ -109,7 +109,14 @@ def _load_category(category: str, max_products: int | None):
     meta_df = pd.DataFrame(meta_rows)
     print(f"    Loaded {len(meta_df)} eligible metadata rows (from {rows_scanned} total)", flush=True)
 
-    # Load reviews JSONL (streaming, filtered to products in meta_df)
+    # Sample down to max_products BEFORE loading reviews, so the review scan
+    # only matches against the sampled set, not all 1.27M+ eligible products.
+    # This dramatically reduces review loading and downstream aggregation burden.
+    if max_products is not None:
+        meta_df = meta_df.sample(n=min(max_products, len(meta_df)), random_state=0)
+    print(f"    Sampled to {len(meta_df)} meta products", flush=True)
+
+    # Load reviews JSONL (streaming, filtered to products in sampled meta_df)
     print(f"    Loading reviews (filtered to {len(meta_df)} products)...", flush=True)
     meta_asins = set(meta_df["parent_asin"].unique())
     reviews_rows = []
@@ -122,11 +129,6 @@ def _load_category(category: str, max_products: int | None):
                 print(f"      {i + 1} reviews scanned, {len(reviews_rows)} matched...", flush=True)
     reviews_df = pd.DataFrame(reviews_rows)
     print(f"    Loaded {len(reviews_df)} review rows", flush=True)
-
-    if max_products is not None:
-        meta_df = meta_df.sample(n=min(max_products, len(meta_df)), random_state=0)
-
-    print(f"    Sampled to {len(meta_df)} meta products", flush=True)
 
     # Filter reviews to only products in metadata
     reviews_df = reviews_df[reviews_df["parent_asin"].isin(meta_df["parent_asin"])]
@@ -206,6 +208,12 @@ def build(categories: list[str], max_products_per_category: int, embed_dim_batch
         print(f"Loading {real_category}...", flush=True)
         meta_df, reviews_df = _load_category(real_category, max_products_per_category)
         print(f"  Loaded {len(meta_df)} metadata, {len(reviews_df)} reviews", flush=True)
+
+        # Convert price to numeric (all prices already validated during inline filtering)
+        if meta_df["price"].dtype == 'object':
+            meta_df["price_numeric"] = pd.to_numeric(meta_df["price"], errors="coerce")
+        else:
+            meta_df["price_numeric"] = meta_df["price"]
 
         print(f"  Splitting review windows...", flush=True)
         windows = _split_review_windows(reviews_df)
