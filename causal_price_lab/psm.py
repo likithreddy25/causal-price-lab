@@ -19,6 +19,7 @@ from dataclasses import dataclass, field
 
 import numpy as np
 import pandas as pd
+from sklearn.decomposition import PCA
 from sklearn.linear_model import LogisticRegression
 from sklearn.neighbors import NearestNeighbors
 from sklearn.preprocessing import StandardScaler
@@ -32,6 +33,19 @@ class MatchResult:
     n_treated: int
     n_matched: int
     caliper: float
+
+
+def _reduce_embeddings(df: pd.DataFrame, embed_cols: list[str], n_components: int = 8) -> tuple[pd.DataFrame, list[str]]:
+    if not embed_cols or len(embed_cols) <= n_components:
+        return df, embed_cols
+    embeddings = df[embed_cols].to_numpy(dtype=float)
+    pca = PCA(n_components=n_components)
+    reduced = pca.fit_transform(embeddings)
+    component_cols = [f"_pca_embed_{i}" for i in range(n_components)]
+    df_with_pca = df.copy()
+    for i, col in enumerate(component_cols):
+        df_with_pca[col] = reduced[:, i]
+    return df_with_pca, component_cols
 
 
 def _fit_propensity(df: pd.DataFrame, covariate_cols: list[str], treatment_col: str, random_state: int):
@@ -60,9 +74,25 @@ def match(
     replacement, within category, with a caliper of `caliper_in_logit_sds`
     standard deviations of the logit score — Austin (2011)'s commonly-cited
     rule of thumb for how tight a caliper to use.
+
+    High-dimensional image embeddings are reduced via PCA before propensity
+    model fitting to avoid overfitting in p > n regimes (more covariates than
+    samples), which causes near-perfect separation regardless of true
+    separability.
     """
     df = df.reset_index(drop=True).copy()
-    proba, logit = _fit_propensity(df, covariate_cols, treatment_col, random_state)
+
+    # Separate embeddings from other covariates and apply PCA
+    embed_cols = [c for c in covariate_cols if c.startswith(schema.IMAGE_EMBED_PREFIX)]
+    non_embed_cols = [c for c in covariate_cols if not c.startswith(schema.IMAGE_EMBED_PREFIX)]
+
+    if embed_cols:
+        df, reduced_embed_cols = _reduce_embeddings(df, embed_cols, n_components=8)
+        propensity_covariates = non_embed_cols + reduced_embed_cols
+    else:
+        propensity_covariates = non_embed_cols
+
+    proba, logit = _fit_propensity(df, propensity_covariates, treatment_col, random_state)
     df[schema.PROPENSITY_SCORE] = proba
     df["_logit"] = logit
 
