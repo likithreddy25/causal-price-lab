@@ -26,7 +26,7 @@ def run(df: pd.DataFrame) -> dict:
     # computed on the actual covariates used for propensity fitting, not raw embeddings.
     embed_cols = [c for c in covariates if c.startswith(schema.IMAGE_EMBED_PREFIX)]
     if embed_cols:
-        df, _ = psm._reduce_embeddings(df, embed_cols, n_components=8)
+        df, _ = psm._reduce_embeddings(df, embed_cols, n_components=8, random_state=0)
 
     naive = psm.naive_ate(df, schema.OUTCOME_REVIEW_GROWTH)
     match_result = psm.match(df, covariate_cols=covariates)

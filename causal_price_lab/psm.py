@@ -36,11 +36,20 @@ class MatchResult:
     propensity_covariates: list[str]  # actual covariates used for propensity model (post-PCA-reduction)
 
 
-def _reduce_embeddings(df: pd.DataFrame, embed_cols: list[str], n_components: int = 8) -> tuple[pd.DataFrame, list[str]]:
+def _reduce_embeddings(
+    df: pd.DataFrame, embed_cols: list[str], n_components: int = 8, random_state: int = 0
+) -> tuple[pd.DataFrame, list[str]]:
     if not embed_cols or len(embed_cols) <= n_components:
         return df, embed_cols
     embeddings = df[embed_cols].to_numpy(dtype=float)
-    pca = PCA(n_components=n_components)
+    # random_state is required here, not cosmetic: sklearn's default svd_solver="auto"
+    # picks the randomized SVD solver on shapes like this one (many more features than
+    # components), which is itself stochastic. Without a fixed seed, PCA silently
+    # returns different components on every call to the same data -- which cascades
+    # into a different propensity model, different matched pairs, and a different ATE
+    # each run. Caught by re-running the same analysis twice on the same real dataset
+    # and getting two different point estimates from identical input.
+    pca = PCA(n_components=n_components, random_state=random_state)
     reduced = pca.fit_transform(embeddings)
     component_cols = [f"_pca_embed_{i}" for i in range(n_components)]
     df_with_pca = df.copy()
@@ -92,7 +101,9 @@ def match(
     if pca_cols:
         propensity_covariates = non_embed_cols + pca_cols
     elif embed_cols:
-        df, reduced_embed_cols = _reduce_embeddings(df, embed_cols, n_components=8)
+        df, reduced_embed_cols = _reduce_embeddings(
+            df, embed_cols, n_components=8, random_state=random_state
+        )
         propensity_covariates = non_embed_cols + reduced_embed_cols
     else:
         propensity_covariates = non_embed_cols
