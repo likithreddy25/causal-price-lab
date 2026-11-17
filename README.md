@@ -189,6 +189,61 @@ memory before filtering (3.7M rows → fixed with inline filter-during-parse,
 eligible pool instead of the post-sampling set (fixed by sampling to
 `--max-products-per-category` *before* loading reviews, not after).
 
+## Companion: classical hypothesis tests on the same real data
+
+A classical-statistics pass over the same 206 real products, run with
+the reusable hypothesis-testing module built in the sibling
+[PortPulse](../../PortPulse) project (`analysis/hypothesis_testing.py`,
+which picks the test, checks its assumptions, and runs a power analysis
+before interpreting anything). It uses the exact naive groups
+`psm.naive_ate()` compares (above- vs. below-category-median price, 102
+vs. 104 products). The mean difference it computes, **+3.30**, matches
+the naive ATE above to the last digit, which cross-checks that the
+groups are the same. Actually run:
+
+```bash
+cd ~/PortPulse && python -m analysis.run_real_hypothesis_tests \
+  --causal-data ~/Downloads/causal-price-lab/data/processed/real_dataset_combined.parquet
+```
+
+| Test | Assumption check | Test used | p | Effect size | Power at a "small" effect | Verdict |
+|---|---|---|---|---|---|---|
+| Review growth, treated vs. control | Normality rejected in both groups (Shapiro p ≈ 1e-17; review counts are heavily right-skewed) | Mann-Whitney U (Welch t: p = 0.59) | 0.68 | d = 0.07 | 0.30 (d = 0.2) | **inconclusive, underpowered** |
+| Placebo (prior review growth), treated vs. control | Same | Mann-Whitney U (Welch t: p = 0.56) | 0.98 | d = 0.08 | 0.30 | inconclusive, underpowered |
+| Price tier × review-growth tertile (cuts at 6 and 14 reviews) | Expected counts all ≥ 29.7, fine | χ² (2 df) | 0.70 | w = 0.06 | 0.23 (w = 0.1) | inconclusive, underpowered |
+
+With about 100 products per group, the smallest effect these tests can
+detect at 80% power is **d ≈ 0.39** (χ²: w ≈ 0.22). The +3.30-review
+naive gap is d = 0.07, far below that. So the honest reading is "this
+sample can't tell a small effect from none," not "no effect." The module
+reports it that way on purpose, rather than turning p = 0.68 into a
+"null result."
+
+**Why PSM was still needed on top of this.** The classical tests don't
+replace the matching design above. They reinforce it in three ways:
+
+1. **A t-test on naive groups answers the wrong question, whatever its
+   p-value.** It tests association, and price tier is confounded with
+   product quality. Had it come back significant, it would still have
+   been the biased +3.30 that matching exists to correct.
+2. **The placebo row says the naive gap is confounding-sized.** Price
+   couldn't have caused prior review growth, yet the naive placebo gap
+   (+3.61) is slightly larger than the naive outcome gap (+3.30). The
+   classical test can't tell those two apart. PSM's placebo check is the
+   step that shows matching removes that gap (placebo matched ATE −0.28).
+3. **Matching fixes bias, not power.** PSM keeps 57 matched pairs out of
+   206 products, so its CI ([−16.6, +16.5]) is wider than the naive
+   comparison's uncertainty, not narrower. The classical power analysis
+   and the matched CI agree: at N = 206, small price effects on review
+   growth are undetectable either way. Resolving them would take a
+   larger sample (roughly 400 per group for d = 0.2 at 80% power), not a
+   different estimator.
+
+Full numbers are in PortPulse's
+[`analysis/reports/real_hypothesis_tests.json`](../../PortPulse/analysis/reports/real_hypothesis_tests.json).
+No code in this repo was changed for this analysis; it only reads
+`data/processed/real_dataset_combined.parquet`.
+
 ## Tests
 
 `tests/test_psm_recovers_true_effect.py` — 5 tests, actually run (`make
